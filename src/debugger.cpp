@@ -128,19 +128,19 @@ void Debugger::Start(size_t length) {
           uint32_t addr = static_cast<uint32_t>(reinterpret_cast<uintptr_t>(de.u.Exception.ExceptionRecord.ExceptionAddress) & 0xFFFFFFFF);
           auto&& iter = hooks_.find(addr);
           if (iter != hooks_.end()) {
-            CollectDataForNGram(de);
             if (WriteProcessMemory(proc_->hProcess(), de.u.Exception.ExceptionRecord.ExceptionAddress, &(iter->second.original_code), 1, nullptr) ==
                 0) {
               throw error::WinApiError(GetLastError());
             }
             iter->second.isReplaced = false;
+            CollectDataForNGram(de, true);
             ++cnt;
             ContinueDebugEvent(de.dwProcessId, de.dwThreadId, DBG_CONTINUE);
           } else {
             ContinueDebugEvent(de.dwProcessId, de.dwThreadId, DBG_EXCEPTION_NOT_HANDLED);
           }
         } else if (de.u.Exception.ExceptionRecord.ExceptionCode == STATUS_WX86_SINGLE_STEP) {
-          CollectDataForNGram(de);
+          CollectDataForNGram(de, false);
           ContinueDebugEvent(de.dwProcessId, de.dwThreadId, DBG_CONTINUE);
           ++cnt;
         } else {
@@ -156,7 +156,7 @@ void Debugger::Start(size_t length) {
   }
 }
 
-void Debugger::CollectDataForNGram(const DEBUG_EVENT& de) {
+void Debugger::CollectDataForNGram(const DEBUG_EVENT& de, bool isFirst) {
   // CONTEXTを取得
   // Registerを構築
   // AddInstruction
@@ -173,6 +173,10 @@ void Debugger::CollectDataForNGram(const DEBUG_EVENT& de) {
     throw error::WinApiError(GetLastError());
   }
 
+  if (isFirst) {
+    --(context.Eip);
+  }
+
   Registers regs{};
   context_to_registers(context, regs);
   if (SeqMaker_AddInstruction(seq_, &regs)) {
@@ -180,6 +184,7 @@ void Debugger::CollectDataForNGram(const DEBUG_EVENT& de) {
   }
 
   context.EFlags |= 0x00000100;
+  context.ContextFlags = CONTEXT_CONTROL;
   if (Wow64SetThreadContext(dbgThread, &context) == 0) {
     throw error::WinApiError(GetLastError());
   }
