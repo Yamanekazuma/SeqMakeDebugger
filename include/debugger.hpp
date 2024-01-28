@@ -55,7 +55,7 @@ class Debugger {
 
   std::optional<Process> proc_;
 
-  void CollectDataForNGram(const DEBUG_EVENT& de);
+  void CollectDataForNGram(const DEBUG_EVENT& de, bool isFirst);
 
   struct HookData {
     bool isReplaced;
